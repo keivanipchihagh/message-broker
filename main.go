@@ -1,60 +1,51 @@
 package main
 
 import (
-	"fmt"
+	"log"
 	"time"
 
 	"github.com/keivanipchihagh/message-broker/pkg/models"
 )
 
 func main() {
-	// Create the broker
+	// Create a new broker
 	broker := models.NewBroker()
+	defer broker.Close()
 
-	// Create topics
-	broker.CreateTopic("news")
-	broker.CreateTopic("sports")
+	// Create and register publishers
+	pub1 := models.NewPublisher("pub1", "news", broker)
+	broker.AddPublisher(pub1)
 
-	// Create consumers
-	newsConsumer1 := models.NewConsumer("news")
-	newsConsumer2 := models.NewConsumer("news")
-	sportsConsumer := models.NewConsumer("sports")
+	pub2 := models.NewPublisher("pub2", "sports", broker)
+	broker.AddPublisher(pub2)
 
-	// Subscribe consumers to topics
-	if err := broker.Subscribe("news", newsConsumer1); err != nil {
-		panic(err)
-	}
-	defer broker.Unsubscribe("news", newsConsumer1)
+	// Create and register consumers
+	con1 := models.NewConsumer("con1", "news", broker)
+	broker.AddConsumer(con1)
+	con1.Start()
+	defer con1.Stop()
 
-	if err := broker.Subscribe("news", newsConsumer2); err != nil {
-		panic(err)
-	}
-	defer broker.Unsubscribe("news", newsConsumer2)
-
-	if err := broker.Subscribe("sports", sportsConsumer); err != nil {
-		panic(err)
-	}
-	defer broker.Unsubscribe("sports", sportsConsumer)
-
-	// Start consuming messages
-	newsConsumer1.Start()
-	defer newsConsumer1.Close()
-
-	newsConsumer2.Start()
-	defer newsConsumer2.Close()
-
-	sportsConsumer.Start()
-	defer sportsConsumer.Close()
+	con2 := models.NewConsumer("con2", "sports", broker)
+	broker.AddConsumer(con2)
+	con2.Start()
+	defer con2.Stop()
 
 	// Publish some messages
-	go func() {
-		for i := range 1 {
-			broker.Publish("news", fmt.Sprintf("News update %d", i))
-			broker.Publish("sports", fmt.Sprintf("Sports update %d", i))
-			time.Sleep(500 * time.Millisecond)
-		}
-	}()
+	pub1.Publish("Hello1")
+	pub1.Publish("Hello2")
+	pub2.Publish("Hello1")
+	pub2.Publish("Hello2")
 
-	// Let the system run for a while
-	time.Sleep(3 * time.Second)
+	// Give consumers time to process messages
+	time.Sleep(100 * time.Millisecond)
+
+	// Print registered consumers and publishers
+	log.Println("Registered consumers per topic:")
+	for topic, consumers := range broker.Consumers {
+		var ids []string
+		for _, c := range consumers {
+			ids = append(ids, c.Id)
+		}
+		log.Printf("Topic %s: %v", topic, ids)
+	}
 }
